@@ -10,6 +10,12 @@
 ✅ Connected to GitHub: `https://github.com/Artamta/Fuxi-Weather-Prediction.git`  
 ✅ SSH key generated for GitHub authentication  
 ✅ `.gitignore` configured for Python/ML projects  
+✅ SSH config set up for cluster: `raj.ayush@192.168.10.3`  
+
+**Cluster Details:**
+- Host: `weather-cluster` (192.168.10.3)  
+- User: `raj.ayush`  
+- Shared system: Git config set per-project only  
 
 ---
 
@@ -18,24 +24,38 @@
 ### 1. Clone Repository on Cluster
 ```bash
 # SSH into your cluster
-ssh username@cluster-address
+ssh raj.ayush@192.168.10.3
 
-# Clone the repository
-git clone git@github.com:Artamta/Fuxi-Weather-Prediction.git
+# Clone the repository (use HTTPS since SSH keys might not be set up)
+git clone https://github.com/Artamta/Fuxi-Weather-Prediction.git
 cd Fuxi-Weather-Prediction
 
-# Configure Git (if not already done)
-git config --global user.name "Artamta"
-git config --global user.email "artamta47@gmail.com"
+# Configure Git for THIS PROJECT ONLY (not global on shared cluster)
+git config user.name "Artamta"
+git config user.email "artamta47@gmail.com"
+
+# Verify your configuration
+git config user.name
+git config user.email
 ```
 
-### 2. Add SSH Key to Cluster (if needed)
+### 2. Git Configuration for Shared Cluster
 ```bash
-# On cluster, generate SSH key
-ssh-keygen -t ed25519 -C "artamta47@gmail.com"
+# IMPORTANT: On shared clusters, DON'T use --global
+# This sets config only for this project/repository
 
-# Display public key to add to GitHub
-cat ~/.ssh/id_ed25519.pub
+# Inside your project directory:
+cd Fuxi-Weather-Prediction
+
+# Set your identity for this project only
+git config user.name "Artamta"
+git config user.email "artamta47@gmail.com"
+
+# Optional: Set up credential helper for this project
+git config credential.helper store
+
+# Check your settings
+git config --list --local
 ```
 
 ---
@@ -81,10 +101,11 @@ git push origin main
 
 ```bash
 # Add to ~/.ssh/config on MacBook
-Host cluster
-    HostName your-cluster-ip
-    User your-username
+Host weather-cluster
+    HostName 192.168.10.3
+    User raj.ayush
     IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 60
 ```
 
 ### **Option 2: GitHub Codespaces**
@@ -104,21 +125,48 @@ rsync -avz --delete /Users/ayush/Desktop/weather_forcast/ username@cluster:/path
 
 ## 🐍 **Python Environment Management**
 
-### **Keep environments consistent:**
-```bash
-# Export environment from MacBook
-pip freeze > requirements.txt
-git add requirements.txt
-git commit -m "Add requirements.txt"
-git push
+### **Conda Environment Setup (Recommended)**
 
-# On cluster, install same environment
-git pull
+#### On MacBook:
+```bash
+# Create and activate environment
+conda create -n weather_forecast python=3.9 -y
+conda activate weather_forecast
+
+# Install packages via conda
+conda install -c conda-forge numpy pandas scipy matplotlib seaborn plotly \
+    jupyter notebook ipykernel xarray netcdf4 h5py tqdm pyyaml -y
+
+# Install remaining packages via pip
+pip install torch torchvision scikit-learn python-dotenv black flake8 pytest
+
+# Export environment for cluster
+conda env export > environment.yml
+pip freeze > requirements.txt
+```
+
+#### On Cluster:
+```bash
+# Option 1: Use conda environment file
+conda env create -f environment.yml
+conda activate weather_forecast
+
+# Option 2: Use pip requirements (if conda not available)
 pip install -r requirements.txt
 
-# Or use conda
-conda env export > environment.yml
-# On cluster: conda env create -f environment.yml
+# Option 3: Manual conda setup
+conda create -n weather_forecast python=3.9 -y
+conda activate weather_forecast
+pip install -r requirements.txt
+```
+
+### **Environment Activation:**
+```bash
+# Always activate before working
+conda activate weather_forecast
+
+# Verify environment
+python -c "import torch, numpy, xarray; print('Environment ready!')"
 ```
 
 ---
