@@ -31,7 +31,7 @@ dependencies:
   - pytest
   # Pip packages that might not be available via conda
   - pip:
-    - torch
-    - torchvision
-    - scikit-learn
-    - python-dotenv
+      - torch
+      - torchvision
+      - scikit-learn
+      - python-dotenv
