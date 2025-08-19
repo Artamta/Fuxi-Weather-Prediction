@@ -5,14 +5,52 @@ This project implements weather forecasting using the Fuxi model architecture.
 ## Project Structure
 
 ```
-weather_forcast/
-├── data/              # Raw and processed data
-├── notebooks/         # Jupyter notebooks for exploration
-├── src/              # Source code
-├── models/           # Trained models
-├── references/       # Research papers and documentation
-├── requirements.txt  # Python dependencies
-└── README.md         # This file
+weather_forecast/
+├── README.md
+├── requirements.txt
+├── setup.py
+├── config/
+│   ├── model_config.yaml
+│   ├── data_config.yaml
+│   └── train_config.yaml
+├── data/
+│   ├── download_era5.py
+│   ├── preprocess.py
+│   └── dataset.py
+├── fuxi/
+│   ├── __init__.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── fuxi_base.py
+│   │   ├── u_transformer.py
+│   │   └── cube_embedding.py
+│   ├── training/
+│   │   ├── __init__.py
+│   │   ├── trainer.py
+│   │   ├── cascade_trainer.py
+│   │   └── losses.py
+│   ├── ensemble/
+│   │   ├── __init__.py
+│   │   ├── ensemble_generator.py
+│   │   └── perturbations.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── metrics.py
+│       ├── visualization.py
+│       └── io_utils.py
+├── scripts/
+│   ├── train_single.py
+│   ├── train_cascade.py
+│   ├── evaluate.py
+│   └── inference.py
+├── notebooks/
+│   ├── data_exploration.ipynb
+│   ├── model_analysis.ipynb
+│   └── results_visualization.ipynb
+└── tests/
+    ├── test_models.py
+    ├── test_data.py
+    └── test_training.py       # This file
 ```
 
 ## Setup
