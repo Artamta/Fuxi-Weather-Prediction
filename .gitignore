@@ -1,3 +1,5 @@
+# Keep only Python files - ignore everything else
+
 # OS generated files
 .DS_Store
 .DS_Store?
@@ -7,60 +9,102 @@
 ehthumbs.db
 Thumbs.db
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual environments
-venv/
-env/
-ENV/
-.venv/
-
-# IDE
-.vscode/
-.idea/
+# Editor files
 *.swp
 *.swo
+*~
+.vscode/
+.idea/
+*.sublime-*
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Data files
+*.csv
+*.json
+*.xml
+*.yaml
+*.yml
+*.txt
+*.md
+*.rst
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Binary files
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+*.dat
+*.h5
+*.hdf5
+*.nc
+*.netcdf
+*.zarr/
 
-# Logs
-logs
+# Image/Media files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.svg
+*.mp4
+*.avi
+*.mov
+*.pdf
+
+# Archive files
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+
+# Log files
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+*.out
+*.err
 
-# Node modules (if using Node.js)
-node_modules/
+# Cache/temp files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+*.egg-info/
+build/
+dist/
+.tox/
 
-# Temporary files
-*.tmp
-*.temp
+# Jupyter files
+.ipynb_checkpoints/
+*.ipynb
+
+# Model files
+*.pth
+*.pt
+*.ckpt
+*.pkl
+*.pickle
+
+# Config files (except Python)
+*.ini
+*.cfg
+*.conf
+*.toml
+
+# Documentation (except Python)
+*.html
+*.css
+*.js
+
+# SSH keys
+id_*
+*.pub
+*.pem
+*.key
+
+# Everything else not Python
+*
+!*.py
+!**/
