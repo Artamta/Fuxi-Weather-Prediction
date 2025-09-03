@@ -1,0 +1,6 @@
+Params: 3.75M
+Final Train Loss: 182.5994
+Final Val Loss: 182.7436
+Persistence Val Loss: 182.8589
+Improvement %: 0.06
+Elapsed seconds: 1.4
