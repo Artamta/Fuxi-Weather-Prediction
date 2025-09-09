@@ -75,6 +75,84 @@ Fuxi-Weather-Prediction/
 
 ---
 
+## 🖼️ Model Visualizations
+
+### Swin Transformer
+
+![Swin Transformer](plots/swin.png)
+
+**Swin Transformer** divides the input grid into small windows and applies self-attention within each window. Windows are shifted between layers, allowing information to mix globally over several blocks.
+
+- **Local Attention:** Each window focuses on local patterns.
+- **Shifted Windows:** Overlapping windows in deeper layers help capture long-range dependencies.
+- **Hierarchical:** The model downsamples and merges patches, building multi-scale representations.
+
+---
+
+### U-Net
+
+![U-Net](plots/unet.jpg)
+
+**U-Net** is a classic encoder-decoder architecture widely used for image segmentation and scientific data.
+
+- **Encoder (Downsampling):** Compresses the input, extracting global features.
+- **Decoder (Upsampling):** Restores the original resolution.
+- **Skip Connections:** Connect encoder and decoder layers at the same scale, preserving fine details lost during downsampling.
+
+---
+
+### U-Transformer
+
+![U-Transformer](plots/swin.png)
+
+**U-Transformer** combines the U-Net’s multi-scale structure with transformer blocks (often Swin blocks).
+
+- **Down Path:** Input is compressed through hierarchical transformer layers (like Swin).
+- **Up Path:** Features are upsampled, with skip connections from earlier layers.
+- **Multi-Scale Attention:** Captures both local and global dependencies, making it powerful for climate and scientific forecasting.
+
+---
+
+## 🧑‍💻 Transformer Implementation (From Scratch)
+
+Your [`Tranformer/Transformer.py`](Tranformer/Transformer.py) file implements a full transformer model (encoder-decoder) from scratch using PyTorch.
+
+**Key Components:**
+
+- **SelfAttention:**  
+  Splits input into multiple heads, computes attention scores, and mixes information from all tokens.
+- **TransformerBlock:**  
+  Applies self-attention, adds a feed-forward neural network, and uses LayerNorm and residual connections for stability.
+- **Encoder:**  
+  Embeds input tokens and their positions, stacks several TransformerBlocks, and outputs contextual representations.
+- **Decoder:**  
+  Embeds target tokens and positions, stacks DecoderBlocks (masked self-attention + cross-attention to encoder output), and predicts the next token at each position.
+- **Masks:**  
+  Source mask hides padding tokens; target mask enforces causal (left-to-right) prediction.
+- **Full Transformer:**  
+  Combines encoder and decoder for tasks like translation, sequence prediction, or forecasting.
+
+**How It Works:**
+
+1. **Input Preparation:**  
+   Source and target sequences are embedded and given positional information.
+2. **Encoding:**  
+   The encoder processes the source sequence, building rich representations.
+3. **Decoding:**  
+   The decoder generates the output sequence, one token at a time, using both its own previous outputs and the encoder’s memory.
+4. **Attention Mechanism:**  
+   Allows the model to focus on relevant parts of the input when generating each output token.
+5. **Training:**  
+   Uses teacher forcing: the decoder receives the true previous tokens during training.
+
+**Why This Matters:**
+
+- **From Scratch:** No external transformer libraries; all logic is implemented manually.
+- **Flexible:** Can be adapted for text, images, or climate grids.
+- **Educational:** Shows a clear understanding of transformer internals.
+
+---
+
 ## 📊 Results (WIP)
 
 | Fold | RMSE ↓ | R² ↑ | ACC ↑ |
