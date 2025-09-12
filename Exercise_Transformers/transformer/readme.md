@@ -1,133 +1,125 @@
-# Vision Transformer (ViT) and Full Transformer Implementation on MNIST
+# 🧠 Transformer from Scratch & Vision Transformer (ViT) on MNIST
 
-This repository contains a **from-scratch implementation of the Transformer architecture** (encoder-decoder, as in the original "Attention is All You Need" paper) in PyTorch, as well as a Vision Transformer (ViT) for image classification on MNIST. All code is modular, readable, and ready for experimentation or extension.
-
----
-
-## 📚 What is a Transformer?
-
-The Transformer is a neural network architecture introduced by Vaswani et al. (2017) that relies entirely on **attention mechanisms** to draw global dependencies between input and output. Unlike RNNs or CNNs, it processes sequences in parallel and can model long-range relationships efficiently.
-
-### **Key Components:**
-
-- **Multi-Head Self Attention:** Allows the model to focus on different parts of the input sequence simultaneously.
-- **Positional Encoding:** Since the model has no recurrence or convolution, positional encodings inject information about the order of the sequence.
-- **Encoder:** Processes the input sequence and produces contextual representations.
-- **Decoder:** Generates the output sequence, attending to both previous outputs and the encoder's memory.
-- **Feedforward Layers & LayerNorm:** Stabilize and enrich the representations.
-- **Masking:** Ensures the decoder only attends to previous tokens during training (teacher forcing).
+Welcome! This repo contains a **full transformer implementation** (encoder-decoder, as in the original "Attention is All You Need" paper) and a Vision Transformer (ViT) for MNIST digit classification, both built from scratch in PyTorch.  
+Explore, learn, and experiment with modern attention-based architectures!
 
 ---
 
-## 🛠️ Implementation Details
-
-### **1. Multi-Head Self Attention**
-
-- Splits the input into multiple "heads" for parallel attention.
-- Computes attention scores (scaled dot-product) between all tokens.
-- Mixes information from all positions in the sequence.
-
-### **2. Transformer Block**
-
-- Each block consists of a multi-head attention layer, followed by a feedforward network.
-- Residual connections and layer normalization are used for stability.
-
-### **3. Encoder**
-
-- Embeds tokens and their positions.
-- Stacks several transformer blocks to build deep contextual representations.
-
-### **4. Decoder**
-
-- Similar to the encoder, but includes masked self-attention and cross-attention to the encoder output.
-- Generates the output sequence one token at a time.
-
-### **5. Full Transformer Model**
-
-- Combines encoder and decoder for tasks like translation, sequence prediction, or forecasting.
-- Implements source and target masks for padding and causality.
-
----
-
-## 🖼️ Architecture Diagrams
-
-_Add your images here for clarity:_
-
-- `images/transformer_architecture.png` — Full transformer encoder-decoder
-- `images/self_attention.png` — Multi-head self-attention mechanism
-- `images/vit_patch_embedding.png` — Vision Transformer patch embedding
-
----
-
-## 🚀 How to Use
-
-### **Vision Transformer on MNIST**
-
-- The ViT model splits each MNIST image into small patches, embeds them, and processes the sequence with transformer blocks.
-- After training, the model achieves strong accuracy on MNIST, demonstrating the effectiveness of transformer architectures for image tasks.
-
-### **Full Transformer (Text/Sequence Tasks)**
-
-- The `Transformer.py` implements the full encoder-decoder transformer as in the original paper.
-- You can adapt this for text translation, time series forecasting, or other sequence-to-sequence problems.
-
----
-
-## 📦 Repository Structure
+## 📦 Folder Structure
 
 ```
 transformer/
+├── Transformer.py      # Full transformer (encoder-decoder) implementation
 ├── vit.ipynb           # Vision Transformer notebook for MNIST
-├── Transformer.py      # Full transformer implementation (encoder-decoder)
-├── images/             # Architecture diagrams and attention visualizations
-└── README.md           # This file
+├── images/             # Architecture diagrams & attention visualizations
+│   ├── transformer_architecture.png
+│   ├── self_attention.png
+│   ├── vit_patch_embedding.png
+│   └── ... (add more as needed)
+└── README.md           # You're here!
 ```
 
 ---
 
-## 🧑‍💻 Example Usage
+## 🚀 What’s Inside?
 
-**Vision Transformer (ViT) on MNIST:**
+### 1. **Transformer.py**
 
-- See `vit.ipynb` for a step-by-step notebook.
-- Uses patch embedding, transformer blocks, and a classifier head.
+A faithful, readable PyTorch implementation of the original transformer:
 
-**Full Transformer:**
+- **Multi-Head Self Attention**: Parallel attention heads for richer representations.
+- **Encoder & Decoder Blocks**: LayerNorm, residuals, feedforward, masking.
+- **Positional Embedding**: Adds order info to sequences.
+- **Source & Target Masking**: Handles padding and causal decoding.
+- **Test Section**: Try it out with toy data!
 
-- See `Transformer.py` for the encoder-decoder implementation.
-- Includes a test section showing how to instantiate and run the model.
+### 2. **Vision Transformer (ViT) Notebook**
+
+- Splits MNIST images into patches.
+- Embeds patches, applies transformer blocks, and classifies digits.
+- Plots training loss and accuracy.
+- Runs fast on Mac (MPS/Metal), CUDA, or CPU.
 
 ---
 
-## ⚡ Device Support
+## 🖼️ Architecture Visuals
 
-- Runs efficiently on Mac (MPS/Metal), CUDA, or CPU.
-- All tensors and models are moved to the appropriate device automatically.
+Want to see how it works?  
+Check out these diagrams in the `images/` folder:
+
+| Diagram                                                          | Description                                                                                                            |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| ![Transformer Architecture](images/transformer_architecture.png) | **Full Transformer Encoder-Decoder**: Shows the flow from input to output, with attention layers and skip connections. |
+| ![Self Attention](images/self_attention.png)                     | **Multi-Head Self Attention**: Visualizes how each token attends to every other token.                                 |
+| ![ViT Patch Embedding](images/vit_patch_embedding.png)           | **ViT Patch Embedding**: How images are split into patches and embedded for transformer input.                         |
+
+Feel free to add more images or your own sketches!
+
+---
+
+## 🤔 How Does a Transformer Work?
+
+- **Attention**: Each token can "look at" every other token, learning relationships regardless of distance.
+- **Multi-Head**: Multiple attention heads let the model learn different types of relationships in parallel.
+- **Encoder**: Processes the input sequence, building deep contextual representations.
+- **Decoder**: Generates output, attending to both previous outputs and the encoder’s memory.
+- **No Recurrence or Convolution**: Everything is parallelized for speed and scalability.
+
+### Why is this cool?
+
+- Handles long-range dependencies better than RNNs/CNNs.
+- Powers state-of-the-art models in NLP, vision, and science.
+
+---
+
+## 🏃‍♂️ Quickstart
+
+**Install dependencies:**
+
+```bash
+pip install torch torchvision matplotlib
+```
+
+**Run the Vision Transformer notebook:**
+
+- Open `vit.ipynb` in Jupyter or VS Code.
+- Run all cells to train ViT on MNIST and see results.
+
+**Try the full transformer:**
+
+- Explore `Transformer.py` for the encoder-decoder implementation.
+- Adapt it for your own sequence tasks (translation, forecasting, etc.).
 
 ---
 
 ## 📊 Results
 
-- Training loss curves and validation accuracy are plotted in the notebook.
-- The transformer models achieve high accuracy on MNIST and are easy to extend for deeper models or other datasets.
+- **ViT on MNIST**: Achieves strong accuracy after just a few epochs.
+- **Training curves**: See loss and accuracy plots in the notebook.
+- **Modular code**: Easy to extend for deeper models, more epochs, or other datasets.
+
+---
+
+## 💬 Interactive Exploration
+
+- Play with hyperparameters in the notebook (patch size, depth, heads).
+- Swap out images in the `images/` folder to visualize different concepts.
+- Add your own experiments and share results!
 
 ---
 
 ## 📚 References
 
-- Vaswani et al., 2017 — [Attention is All You Need](https://arxiv.org/abs/1706.03762)
-- Dosovitskiy et al., 2020 — [An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale](https://arxiv.org/abs/2010.11929)
+- [Attention is All You Need (Vaswani et al., 2017)](https://arxiv.org/abs/1706.03762)
+- [An Image is Worth 16x16 Words (Dosovitskiy et al., 2020)](https://arxiv.org/abs/2010.11929)
 
 ---
 
-## 💡 Notes
+## 🙌 Contributing & Feedback
 
-- All code is written from scratch, with no external transformer libraries.
-- Modular design makes it easy to experiment with different architectures, depths, and tasks.
-- Add your own images to the `images/` folder and reference them in this README for clarity.
+Questions, suggestions, or want to add your own diagrams?  
+Open an issue or pull request—everyone’s welcome!
 
 ---
 
-## 🙌 Contributing
-
-Contributions, suggestions, and feedback are welcome!
+**Happy experimenting! 🚀**
