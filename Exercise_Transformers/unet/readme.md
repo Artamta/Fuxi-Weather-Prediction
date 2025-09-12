@@ -28,8 +28,6 @@ unet/
 | ![UNet Architecture](images/unet_architecture.png)    | **UNet Encoder-Decoder:** Shows the contracting (downsampling) and expanding (upsampling) paths, with skip connections.               |
 | ![Skip Connections](images/unet_skip_connections.png) | **Skip Connections:** Visualizes how features from the encoder are copied and concatenated into the decoder for precise localization. |
 
-Feel free to add more images—segmentation outputs, feature maps, or your own sketches!
-
 ---
 
 ## 🤔 What is UNet?

@@ -53,8 +53,6 @@ Check out these diagrams in the `images/` folder:
 | ![Self Attention](images/self_attention.png)                     | **Multi-Head Self Attention**: Visualizes how each token attends to every other token.                                 |
 | ![ViT Patch Embedding](images/vit_patch_embedding.png)           | **ViT Patch Embedding**: How images are split into patches and embedded for transformer input.                         |
 
-Feel free to add more images or your own sketches!
-
 ---
 
 ## 🤔 How Does a Transformer Work?
