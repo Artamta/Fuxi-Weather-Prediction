@@ -88,7 +88,7 @@ class UNet(nn.Module):
         x=self.up_conv_2(torch.cat([x,y],1))
 
         x=self.up_trans_3(x)
-        y=crop_img(x3,x)
+        y=crop_img(x3,x) 
         x=self.up_conv_3(torch.cat([x,y],1))
 
         x=self.up_trans_4(x)
