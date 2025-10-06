@@ -12,6 +12,8 @@ sys.path.append('./models')
 from cube_embedding import CubeEmbedding3D
 from u_transformer import UTransformer
 from fuxi_model import FuXiModel
+from models.swin import SwinTransformerV2
+
 
 def test_gpu_setup():
     """Test GPU availability and performance"""
@@ -56,14 +58,16 @@ def test_cube_embedding():
         # Create model
         model = CubeEmbedding3D(in_channels=channels, embed_dim=1536).to(device)
         
-        # Time the forward pass
-        torch.cuda.synchronize()
+        # Before timing
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         start_time = time.time()
-        
+
         with torch.no_grad():
             output = model(x)
-            
-        torch.cuda.synchronize()
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         end_time = time.time()
         
         output_memory = output.numel() * 4 / 1e9  # GB
@@ -185,13 +189,14 @@ def test_complete_fuxi_model():
         print(f"  Parameters: {param_count:,}")
         
         # Test single-step prediction
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         start_time = time.time()
         
         with torch.no_grad():
             output = model(x, target_shape=(height, width))
-            
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():    
+            torch.cuda.synchronize()
         end_time = time.time()
         
         print(f"  Single-step time: {(end_time - start_time)*1000:.1f} ms")
@@ -204,13 +209,14 @@ def test_complete_fuxi_model():
         
         # Test multi-step prediction (smaller steps for speed)
         steps = 3
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         start_time = time.time()
         
         with torch.no_grad():
             multi_output = model.predict_autoregressive(x, steps=steps, target_shape=(height, width))
-            
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():    
+            torch.cuda.synchronize()
         end_time = time.time()
         
         print(f"  Multi-step time ({steps} steps): {(end_time - start_time)*1000:.1f} ms")
@@ -222,7 +228,8 @@ def test_complete_fuxi_model():
         print("  ✅ Multi-step prediction correct!")
         
         del x, output, multi_output, model
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         print()
 
 def test_memory_scaling():
@@ -275,6 +282,57 @@ def test_memory_scaling():
                 raise e
     print()
 
+def test_swin_transformer_v2():
+    """Test the Swin Transformer V2"""
+    print("=== Swin Transformer V2 Test ===")
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Test with cube embedding output size
+    batch_size = 2
+    in_chans = 1536
+    height = 180  # 721//4
+    width = 360   # 1440//4
+    
+    print(f"Testing SwinTransformerV2: {batch_size}×{in_chans}×{height}×{width}")
+    
+    # Create test data (output from cube embedding)
+    x = torch.randn(batch_size, in_chans, height, width, device=device)
+    
+    # Example SwinTransformerV2 config (adjust as needed)
+    model = SwinTransformerV2(
+        img_size=(180, 360),
+        patch_size=1,
+        in_chans=1536,
+        num_classes=0,
+        embed_dim=96,
+        depths=[2, 2, 6],  # or as needed
+        num_heads=[3, 6, 12],
+        window_size=15  # <--- Change this value here
+).to(device)
+    
+    param_count = sum(p.numel() for p in model.parameters())
+    print(f"    Parameters: {param_count:,}")
+    
+    # Time forward pass
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    start_time = time.time()
+    
+    with torch.no_grad():
+        output = model(x)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    end_time = time.time()
+    
+    print(f"    Forward time: {(end_time - start_time)*1000:.1f} ms")
+    print(f"    Output shape: {output.shape}")
+    print("    ✅ SwinTransformerV2 forward pass successful!")
+    
+    del model, output, x
+    torch.cuda.empty_cache()
+    print()
+
 def run_all_tests():
     """Run complete test suite"""
     print("🚀 Starting FuXi Complete Test Suite")
@@ -282,7 +340,8 @@ def run_all_tests():
     
     test_gpu_setup()
     test_cube_embedding()
-    test_u_transformer()
+    # test_u_transformer()  # You can comment this out if replacing
+    test_swin_transformer_v2()  # Add this line
     test_complete_fuxi_model()
     test_memory_scaling()
     

@@ -9,7 +9,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.cube_embedding import CubeEmbedding3D
-from models.u_transformer import UTransformer
+from models.swin import SwinTransformerV2
 
 class FuXiModel(nn.Module):
     """
@@ -44,13 +44,16 @@ class FuXiModel(nn.Module):
             embed_dim=embed_dim
         )
         
-        self.u_transformer = UTransformer(
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            depth=depth,
-            mlp_ratio=mlp_ratio,
-            dropout=dropout
-        )
+        self.swin_transformer = SwinTransformerV2(
+            img_size=(46, 90),          # Set to your cube embedding output size
+            patch_size=1,             # Use 1 if input is already embedded
+            in_chans=embed_dim,       # embed_dim from CubeEmbedding3D (e.g., 1536)
+            num_classes=0,            # 0 if you want features, or set to your output classes
+            embed_dim=96,             # Swin base embed dim (can tune)
+            depths=[2, 2, 6],         # Number of blocks per stage (tune as needed)
+            num_heads=[3, 6, 12],     # Heads per stage (tune as needed)
+            window_size=2            # Must divide H and W at all stages
+)
         
         # Output projection
         self.output_head = nn.Sequential(
@@ -80,9 +83,19 @@ class FuXiModel(nn.Module):
         
         # 1. Cube embedding: reduce spatiotemporal dimensions
         embedded = self.cube_embedding(x)  # (B, embed_dim, H//4, W//4)
+
+        # After embedding
+        B, C, H, W = embedded.shape
+
+# Pad height if needed
+        # Pad height and width to even numbers
+        pad_h = (2 - H % 2) % 2
+        pad_w = (2 - W % 2) % 2
+        if pad_h > 0 or pad_w > 0:
+            embedded = F.pad(embedded, (0, pad_w, 0, pad_h))  # (left, right, top, bottom)
         
         # 2. U-Transformer: process with attention
-        processed = self.u_transformer(embedded)  # (B, embed_dim, H//4, W//4)
+        processed = self.swin_transformer(embedded) # (B, embed_dim, H//4, W//4)
         
         # 3. Output head: predict weather variables
         output = self.output_head(processed)  # (B, out_channels, H//4, W//4)
