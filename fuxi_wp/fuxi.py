@@ -1,97 +1,80 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Tuple
+from einops import rearrange
 
 from cube_embedding import CubeEmbedding3D
-from u_transformer import UTransformer
+from swin_blocks import SwinBlockStack
 
 
-class FuXiModel(nn.Module):
-    """
-    Complete FuXi Weather Forecasting Model
-    
-    Pipeline:
-        Input: (B, 70, 2, 721, 1440) - Two timesteps of 70 weather variables
-        ↓
-        CubeEmbedding: (B, 1536, 180, 360)
-        ↓
-        U-Transformer: (B, 1536, 180, 360)
-        ↓
-        Output Head: (B, 70, 180, 360)
-        ↓
-        Bilinear Upsample: (B, 70, 721, 1440)
-    """
-    
+class UpsampleDecoder(nn.Module):
+    def __init__(self, in_dim: int, out_channels: int, target_shape=(16, 8)):
+        super().__init__()
+        self.target_shape = target_shape
+        self.proj = nn.Sequential(
+            nn.Conv2d(in_dim, in_dim // 2, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.ConvTranspose2d(in_dim // 2, in_dim // 4, kernel_size=4, stride=2, padding=1),
+            nn.GELU(),
+            nn.ConvTranspose2d(in_dim // 4, out_channels, kernel_size=4, stride=2, padding=1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.proj(x)
+        return nn.functional.interpolate(
+            x, size=self.target_shape, mode="bilinear", align_corners=False
+        )
+
+
+class FuXiTinyBackbone(nn.Module):
     def __init__(
         self,
+        embed_dim: int = 384,
+        depths=(6, 6),
+        num_heads=(6, 6),
+        input_shape=(720, 1440),
+        window_size: int = 8,
         in_channels: int = 70,
-        out_channels: int = 70,
-        embed_dim: int = 1536,
-        depths: Tuple[int, int] = (24, 24),
-        num_heads: Tuple[int, int] = (12, 12),
-        window_sizes: Tuple[int, int] = (10, 10),  # Changed for 180×360
-        mlp_ratio: float = 4.0,
-        drop_path_rate: float = 0.2,
+        output_channels: int = 70,
     ):
         super().__init__()
-        
-        # Step 1: Cube Embedding (2×70×721×1440 → 1536×180×360)
-        self.cube_embedding = CubeEmbedding3D(
-            in_channels=in_channels,
-            embed_dim=embed_dim,
-            patch_size=(2, 4, 4)
+        self.embedding = CubeEmbedding3D(in_channels=in_channels, embed_dim=embed_dim)
+        self.target_shape = input_shape
+
+        spatial_size = (
+            input_shape[0] // self.embedding.patch_size[1],
+            input_shape[1] // self.embedding.patch_size[2],
         )
-        
-        # After cube embedding: 721/4 = 180.25 → 180, 1440/4 = 360
-        # Step 2: U-Transformer (1536×180×360 → 1536×180×360)
-        self.u_transformer = UTransformer(
-            embed_dim=embed_dim,
-            input_resolution=(180, 360),          # Changed from (48, 96)
-            down_resolution=(90, 180),            # Changed from (24, 48)
-            depths=depths,
-            num_heads=num_heads,
-            window_sizes=window_sizes,
-            mlp_ratio=mlp_ratio,
-            drop_path_rate=drop_path_rate,
+        self.spatial_size = spatial_size
+
+        win = min(window_size, spatial_size[0], spatial_size[1])
+
+        self.encoder = SwinBlockStack(
+            embed_dim,
+            depth=depths[0],
+            heads=num_heads[0],
+            input_resolution=spatial_size,
+            window_size=win,
         )
-        
-        # Step 3: Output Head (FC layer)
-        self.output_head = nn.Sequential(
-            nn.Conv2d(embed_dim, embed_dim // 2, kernel_size=1),
-            nn.GELU(),
-            nn.Conv2d(embed_dim // 2, out_channels, kernel_size=1)
+        self.bottleneck = SwinBlockStack(
+            embed_dim,
+            depth=depths[1],
+            heads=num_heads[1],
+            input_resolution=spatial_size,
+            window_size=win,
         )
-        
-    def forward(self, x: torch.Tensor, target_shape: Tuple[int, int] = (721, 1440)) -> torch.Tensor:
-        B = x.shape[0]
-        
-        # Step 1: Cube Embedding
-        embedded = self.cube_embedding(x)  # (B, 1536, 180, 360)
-        
-        # Step 2: U-Transformer processing
-        processed = self.u_transformer(embedded)  # (B, 1536, 180, 360)
-        
-        # Step 3: Output head
-        output = self.output_head(processed)  # (B, 70, 180, 360)
-        
-        # Step 4: Upsample to original resolution
-        output = F.interpolate(output, size=target_shape, 
-                              mode='bilinear', align_corners=False)  # (B, 70, 721, 1440)
-        
-        return output
-    
-    def predict_autoregressive(self, x: torch.Tensor, steps: int = 20) -> torch.Tensor:
-        predictions = []
-        current = x
-        
-        for _ in range(steps):
-            pred = self.forward(current)
-            predictions.append(pred)
-            
-            current = torch.cat([
-                current[:, :, 1:2, :, :],
-                pred.unsqueeze(2)
-            ], dim=2)
-        
-        return torch.stack(predictions, dim=0)
+        self.decoder = UpsampleDecoder(
+            in_dim=embed_dim,
+            out_channels=output_channels,
+            target_shape=input_shape,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.embedding(x)
+        h, w = x.shape[-2:]
+        if (h, w) != self.spatial_size:
+            raise ValueError(f"Expected spatial {self.spatial_size}, got {(h, w)}")
+        x = rearrange(x, "b c h w -> b h w c")
+        x = self.encoder(x)
+        x = self.bottleneck(x)
+        x = rearrange(x, "b h w c -> b c h w")
+        return self.decoder(x)
