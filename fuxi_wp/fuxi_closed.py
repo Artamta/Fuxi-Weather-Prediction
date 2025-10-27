@@ -59,7 +59,7 @@ class FuXiModel(nn.Module):
         self,
         in_channels: int = 70,
         out_channels: int = 70,
-        embed_dim: int = 512,
+        embed_dim: int = 96,
         swin_window_size: int = 4
     ):
         super().__init__()
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     model = FuXiModel(
         in_channels=in_channels,
         out_channels=in_channels,
-        embed_dim=1536,
+        embed_dim=96,
         swin_window_size=4
     )
 
