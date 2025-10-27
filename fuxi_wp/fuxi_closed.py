@@ -60,7 +60,9 @@ class FuXiModel(nn.Module):
         in_channels: int = 70,
         out_channels: int = 70,
         embed_dim: int = 96,
-        swin_window_size: int = 4
+        swin_window_size: int = 4,
+        input_height=721,   # <-- add this
+        input_width=1440
     ):
         super().__init__()
         self.swin_window_size = swin_window_size
@@ -73,7 +75,7 @@ class FuXiModel(nn.Module):
         self.down = DownBlock(embed_dim, embed_dim)
 
         # Calculate Swin input shape (after padding and downsampling)
-        dummy = torch.zeros(1, in_channels, 2, 721, 1440)
+        dummy = torch.zeros(1, in_channels, 2, input_height, input_width)
         with torch.no_grad():
             dummy_emb = self.cube_embedding(dummy)
             dummy_emb = pad_to_window(dummy_emb, self.swin_window_size, num_downsamples=1)
@@ -91,7 +93,7 @@ class FuXiModel(nn.Module):
             global_pool=None,
             embed_dim=embed_dim // 16,  # 1536//16=96, so last stage is 96*4=384
             depths=[2, 2, 6],
-            num_heads=[3, 6, 12],
+            num_heads=[2, 4, 8],
             window_size=self.swin_window_size
         )
 
@@ -101,7 +103,7 @@ class FuXiModel(nn.Module):
         # FC Layer: 1x1 Conv2d, as in the FuXi paper
         self.fc = nn.Conv2d(embed_dim, out_channels, kernel_size=1)
 
-    def forward(self, x, target_shape=(721, 1440)):
+    def forward(self, x, target_shape=(180, 360)):
         print("Input x:", x.shape)
         x = self.cube_embedding(x)
         print("After embedding:", x.shape)

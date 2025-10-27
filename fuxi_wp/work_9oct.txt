@@ -1,0 +1,53 @@
+FuXi Mini Pipeline Overview
+===========================
+
+1. Data Preparation (`sample_zarr_to_netcdf.py`)
+-----------------------------------------------
+- Reads ERA5-style Zarr samples (pressure-level and surface fields).
+- Pressure fields: temperature, geopotential, u, v at 13 levels → 52 channels.
+- Surface fields: 2 m temperature & humidity, 10 m wind (u/v), surface pressure → 5 channels.
+- Currently captured channels: 57 (13 specific-humidity levels still missing for full 70).
+- Packs tensors as `(time, channel, lat, lon)`, slices a mini grid `(16, 8)`, saves `mini_sample.nc`.
+
+2. Cube Embedding (`fuxi_wp/cube_embedding.py`)
+----------------------------------------------
+- Expects `(B, C, T=2, H=16, W=8)` history cubes.
+- Single 3D conv (kernel `(2,4,4)`, stride `(1,4,4)`) shrinks spatial resolution ×4 while keeping history.
+- Kaiming init; produces `(B, 384, H'=4, W'=2)` latent “cube” features.
+
+3. Swin Transformer Stack (`fuxi_wp/swin_blocks.py`)
+----------------------------------------------------
+- Wrapper around Microsoft Swin-v2 `BasicLayer`.
+- Operates on `(B, H', W', C)` tokens with alternating shifted windows.
+- Auto-clamps window size to fit mini grid; mini config uses depth=2, heads=4, window=2.
+
+4. FuXi Tiny Backbone + Decoder (`fuxi_wp/fuxi.py`)
+---------------------------------------------------
+- Embeds history with `CubeEmbedding3D`.
+- Applies two SwinBlockStack stages (encoder + bottleneck) at `(4, 2)`.
+- `UpsampleDecoder` (conv + transpose-conv) upsamples to `(16, 8)` and predicts output channels.
+- End-to-end forward returns `(B, C_out, 16, 8)`; C_out defaults to input channel count.
+
+Training Loop (`fuxi_wp/training.py`)
+-------------------------------------
+- Loads `mini_sample.nc`, renames dims, stacks variables, normalizes per-channel (z-score).
+- Dataset yields `(history, target)` tensors; DataLoader shuffles mini batches.
+- `FuXiTinyBackbone` instantiated with dataset channel count and mini spatial grid.
+- Runs 5-epoch toy loop with AdamW + MSE to confirm gradients.
+
+Architecture Schematic (Mini Config)
+------------------------------------
+Input (B, 70, T=2, H=16, W=8)
+ └─ CubeEmbedding3D            → (B, 384, 4, 2)
+ └─ Rearrange                  → (B, 4, 2, 384)
+ └─ SwinBlockStack #1          → (B, 4, 2, 384)
+ └─ SwinBlockStack #2          → (B, 4, 2, 384)
+ └─ Rearrange                  → (B, 384, 4, 2)
+ └─ UpsampleDecoder            → (B, 70, 16, 8)
+
+Next Milestones
+---------------
+- Integrate the 13 missing humidity levels to reach 70-channel history.
+- Expand dataset split (train/val), add validation loop & metric logging.
+- Tune normalization (per-variable stats), losses, and learning-rate schedule.
+- Scale Swin depths/heads/window and spatial resolution toward full FuXi production settings once mini pipeline is solid.
