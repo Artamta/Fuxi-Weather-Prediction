@@ -49,7 +49,7 @@ class UpBlock(nn.Module):
         super().__init__()
         self.tconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
         self.res = ResidualBlock(out_channels)
-    def forward(self, x):
+    def forward(self, x, skip=None):
         x = self.tconv(x)
         x = self.res(x)
         return x
@@ -64,12 +64,12 @@ class FuXiModel(nn.Module):
     ):
         super().__init__()
         self.swin_window_size = swin_window_size
-        self.embed_dim = embed_dim
-
         self.cube_embedding = CubeEmbedding3D(
             in_channels=in_channels,
             embed_dim=embed_dim
         )
+
+        # Down Block: 1536 -> 1536, spatial 180x360 -> 90x180
         self.down = DownBlock(embed_dim, embed_dim)
 
         # Calculate Swin input shape (after padding and downsampling)
@@ -123,13 +123,15 @@ class FuXiModel(nn.Module):
         # Upsample Swin output to match skip's spatial size
         if x.shape[-2:] != skip.shape[-2:]:
             x = F.interpolate(x, size=skip.shape[-2:], mode='bilinear', align_corners=False)
-            print(f"After upsampling Swin output to skip spatial size: {x.shape}")
+        print(f"After upsampling Swin output to skip spatial size: {x.shape}")
+
         x = torch.cat([x, skip], dim=1)
         print("After concat Swin and skip:", x.shape)
-        x = self.up(x)
+        x = self.up(x, None)
         print("After UpBlock:", x.shape)
         x_fc = self.fc(x)
         print("After FC layer:", x_fc.shape)
+        # Upsample to original resolution
         x_out = F.interpolate(x_fc, size=target_shape, mode='bilinear', align_corners=False)
         print("After upsampling:", x_out.shape)
         return x_out
@@ -158,9 +160,10 @@ class FuXiModel(nn.Module):
                 next_pred_expanded = next_pred.unsqueeze(2)      # (B, C, 1, H, W)
                 current_input = torch.cat([last_timestep, next_pred_expanded], dim=2)
 
+                # Downsample if needed to match original input resolution
                 if current_input.shape[-2:] != (H, W):
                     current_input = F.interpolate(
-                        current_input.flatten(0, 1),
+                        current_input.flatten(0, 1),  # Combine B and T dims
                         size=(H, W),
                         mode='bilinear',
                         align_corners=False
@@ -177,6 +180,7 @@ if __name__ == "__main__":
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # ERA5-like dimensions
     batch_size = 1
     in_channels = 70
     timesteps = 2
@@ -184,7 +188,7 @@ if __name__ == "__main__":
     width = 1440
 
     print(f"\n[INFO] Creating synthetic weather data of shape: ({batch_size}, {in_channels}, {timesteps}, {height}, {width})")
-    x = torch.randn(batch_size, in_channels, timesteps, height, width, device=device)
+    x = torch.randn(batch_size, in_channels, timesteps, height, width)
     print(f"[DEBUG] Input tensor shape: {x.shape}")
 
     print("\n[INFO] Instantiating FuXi model...")
@@ -193,12 +197,13 @@ if __name__ == "__main__":
         out_channels=in_channels,
         embed_dim=1536,
         swin_window_size=4
-    ).to(device)
+    )
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"[INFO] Total parameters: {total_params:,}")
     print(f"[INFO] Model size: ~{total_params * 4 / 1e9:.2f} GB (fp32)")
 
+    # Test single-step prediction
     print("\n--- Single-step prediction ---")
     with torch.no_grad():
         output = model(x)
@@ -206,6 +211,7 @@ if __name__ == "__main__":
 
     print(f"[RESULT] Input->Output: {x.shape} -> {output.shape}")
 
+    # Test multi-step prediction
     print("\n--- Multi-step prediction (5 steps) ---")
     with torch.no_grad():
         multi_output = model.predict_autoregressive(x, steps=5)
@@ -216,6 +222,7 @@ if __name__ == "__main__":
 
     print("\n✅ Complete FuXi model working correctly!")
 
+    # Memory usage estimation
     def estimate_memory_gb(tensor_shape, dtype_bytes=4):
         elements = 1
         for dim in tensor_shape:
