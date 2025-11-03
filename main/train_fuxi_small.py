@@ -173,9 +173,10 @@ def main():
         in_channels=train_set.data.shape[1],
         out_channels=train_set.data.shape[1],
         swin_window_size=8,
-        embed_dim=192,
+        embed_dim=256,
         input_height=train_set.data.shape[-2],
         input_width=train_set.data.shape[-1],
+        depths=[3, 6, 6],
     ).to(device)
     max_batch = find_max_batch_size(model, train_set, device)
     print(f"Max batch size that fits: {max_batch}")

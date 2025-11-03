@@ -85,7 +85,9 @@ class FuXiModel(nn.Module):
         embed_dim: int = 192,
         swin_window_size: int = 8,
         input_height=32,
-        input_width=64
+        input_width=64,
+        depths=[2, 4, 4],
+        num_heads=None,
     ):
         super().__init__()
         self.swin_window_size = swin_window_size
@@ -118,8 +120,8 @@ class FuXiModel(nn.Module):
             in_chans=embed_dim,
             num_classes=0,
             embed_dim=swin_embed_dim,
-            depths=[2, 4, 4],           # Deeper Swin
-            num_heads=[2, 4, 8],
+            depths=depths,           # Deeper Swin
+            num_heads=num_heads,
             window_size=self.swin_window_size,
             drop_path_rate=0.2
         )
