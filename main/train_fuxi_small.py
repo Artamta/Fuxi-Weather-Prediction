@@ -5,8 +5,11 @@ from torch.utils.data import DataLoader, Dataset
 import torch.optim as optim
 import xarray as xr
 import matplotlib.pyplot as plt
+from datetime import datetime
+import json
+import argparse
 
-from fuxi_small import FuXiModel  # Make sure this matches your model file
+from fuxi_small import FuXiModel
 
 def latitude_weighted_l1_loss(pred, target, latitudes):
     weights = torch.cos(torch.deg2rad(latitudes)).to(pred.device)
@@ -47,7 +50,6 @@ class MiniFuXiDataset(Dataset):
         self.latitudes = latitudes
         ds.close()
 
-        # Save variable names for plotting
         self.pressure_vars = pressure_vars
         self.surface_vars = surface_vars
         self.levels = pressure.shape[2] if len(pressure.shape) == 5 else 1
@@ -60,6 +62,67 @@ class MiniFuXiDataset(Dataset):
         target = self.data[idx + self.history]
         past = past.permute(1, 0, 2, 3)  # (C, history, H, W)
         return past, target
+
+def plot_losses(train_losses, val_losses, outdir):
+    plt.figure()
+    plt.plot(train_losses, label="Train Loss")
+    plt.plot(val_losses, label="Val Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Latitude-weighted L1 Loss")
+    plt.legend()
+    plt.title("Training and Validation Loss")
+    plt.savefig(os.path.join(outdir, "loss_curve.png"))
+    plt.close()
+
+def get_variable_names(dataset):
+    pressure_vars = dataset.pressure_vars
+    surface_vars = dataset.surface_vars
+    levels = dataset.levels
+    var_names = []
+    for p in pressure_vars:
+        for l in range(levels):
+            var_names.append(f"{p}_lev{l}")
+    var_names.extend(surface_vars)
+    return var_names
+
+def find_max_batch_size(model, dataset, device, start=1, step=4, max_batch=2048):
+    batch_size = start
+    last_good = start
+    while batch_size <= max_batch:
+        try:
+            loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+            history, target = next(iter(loader))
+            history = history.to(device)
+            target = target.to(device)
+            with torch.cuda.amp.autocast():
+                pred = model(history, target_shape=target.shape[-2:])
+            last_good = batch_size
+            batch_size += step
+            torch.cuda.empty_cache()
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                print(f"OOM at batch size {batch_size}, last good: {last_good}")
+                break
+            else:
+                raise e
+    return last_good
+
+class EarlyStopping:
+    def __init__(self, patience=10, min_delta=1e-4):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.best_loss = float('inf')
+        self.early_stop = False
+
+    def __call__(self, val_loss):
+        if val_loss < self.best_loss - self.min_delta:
+            self.best_loss = val_loss
+            self.counter = 0
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
 
 def train_one_epoch(model, loader, optimizer, device, latitudes, scaler):
     model.train()
@@ -92,74 +155,55 @@ def eval_one_epoch(model, loader, device, latitudes):
         batches += 1
     return total_l1 / batches, total_mae / batches
 
-def plot_losses(train_losses, val_losses, outdir):
-    plt.figure()
-    plt.plot(train_losses, label="Train Loss")
-    plt.plot(val_losses, label="Val Loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Latitude-weighted L1 Loss")
-    plt.legend()
-    plt.title("Training and Validation Loss")
-    plt.savefig(os.path.join(outdir, "loss_curve.png"))
-    plt.close()
-
-def get_variable_names(dataset):
-    pressure_vars = dataset.pressure_vars
-    surface_vars = dataset.surface_vars
-    levels = dataset.levels
-    var_names = []
-    for p in pressure_vars:
-        for l in range(levels):
-            var_names.append(f"{p}_lev{l}")
-    var_names.extend(surface_vars)
-    return var_names
-
-# --- Auto batch size finder ---
-def find_max_batch_size(model, dataset, device, start=16, step=64, max_batch=2048):
-    batch_size = start
-    last_good = start
-    while batch_size <= max_batch:
-        try:
-            loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-            history, target = next(iter(loader))
-            history = history.to(device)
-            target = target.to(device)
-            with torch.cuda.amp.autocast():
-                pred = model(history, target_shape=target.shape[-2:])
-            last_good = batch_size
-            batch_size += step
-            torch.cuda.empty_cache()
-        except RuntimeError as e:
-            if "out of memory" in str(e):
-                print(f"OOM at batch size {batch_size}, last good: {last_good}")
-                break
-            else:
-                raise e
-    return last_good
-
-# --- Early stopping utility ---
-class EarlyStopping:
-    def __init__(self, patience=10, min_delta=1e-4):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.counter = 0
-        self.best_loss = float('inf')
-        self.early_stop = False
-
-    def __call__(self, val_loss):
-        if val_loss < self.best_loss - self.min_delta:
-            self.best_loss = val_loss
-            self.counter = 0
-        else:
-            self.counter += 1
-            if self.counter >= self.patience:
-                self.early_stop = True
+def save_config(config, outdir):
+    with open(os.path.join(outdir, "config.txt"), "w") as f:
+        json.dump(config, f, indent=2)
 
 def main():
-    outdir = os.getcwd() 
-    os.makedirs(os.path.join(outdir, "checkpoints"), exist_ok=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--embed_dim', type=int, default=256)
+    parser.add_argument('--depths', type=int, nargs='+', default=[3, 6, 6])
+    parser.add_argument('--num_heads', type=int, nargs='+', default=[2, 4, 8])
+    parser.add_argument('--num_down_blocks', type=int, default=2)
+    parser.add_argument('--num_up_blocks', type=int, default=2)
+    parser.add_argument('--lr', type=float, default=2.5e-4)
+    parser.add_argument('--weight_decay', type=float, default=0.1)
+    parser.add_argument('--patience', type=int, default=10)
+    args = parser.parse_args()
+
+    embed_dim = args.embed_dim
+    depths = args.depths
+    num_heads = args.num_heads
+    num_down_blocks = args.num_down_blocks
+    num_up_blocks = args.num_up_blocks
+    lr = args.lr
+    weight_decay = args.weight_decay
+    patience = args.patience
+
+    tag = (
+        f"fuxi_ed{embed_dim}_d{depths}_nh{num_heads}"
+        f"_down{num_down_blocks}_up{num_up_blocks}_"
+        f"lr{lr}_wd{weight_decay}_"
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
+    outdir = os.path.join(os.getcwd(), tag)
+    ckpt_dir = os.path.join(outdir, "checkpoints")
     plots_dir = os.path.join(outdir, "Plots")
+    os.makedirs(ckpt_dir, exist_ok=True)
     os.makedirs(plots_dir, exist_ok=True)
+
+    config = {
+        "embed_dim": embed_dim,
+        "depths": depths,
+        "num_heads": num_heads,
+        "num_down_blocks": num_down_blocks,
+        "num_up_blocks": num_up_blocks,
+        "lr": lr,
+        "weight_decay": weight_decay,
+        "patience": patience,
+        "timestamp": datetime.now().isoformat()
+    }
+    save_config(config, outdir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     history_steps = 2
@@ -168,32 +212,32 @@ def main():
     val_set = MiniFuXiDataset("val_data.nc", history_steps=history_steps)
     test_set = MiniFuXiDataset("test_data.nc", history_steps=history_steps)
 
-    # --- Find max batch size ---
     model = FuXiModel(
         in_channels=train_set.data.shape[1],
         out_channels=train_set.data.shape[1],
         swin_window_size=8,
-        embed_dim=256,
+        embed_dim=embed_dim,
         input_height=train_set.data.shape[-2],
         input_width=train_set.data.shape[-1],
-        depths=[3, 6, 6],
+        depths=depths,
+        num_heads=num_heads,
+        # If you add more Down/Up blocks, pass those as arguments here too!
     ).to(device)
     max_batch = find_max_batch_size(model, train_set, device)
     print(f"Max batch size that fits: {max_batch}")
 
-    # --- DataLoaders with optimal batch size ---
     train_loader = DataLoader(train_set, batch_size=max_batch, shuffle=True, num_workers=16, pin_memory=True)
     val_loader = DataLoader(val_set, batch_size=max_batch, shuffle=False, num_workers=8, pin_memory=True)
     test_loader = DataLoader(test_set, batch_size=max_batch, shuffle=False, num_workers=8, pin_memory=True)
 
     latitudes = torch.tensor(train_set.latitudes, dtype=torch.float32)
 
-    optimizer = optim.AdamW(model.parameters(), lr=2.5e-4, betas=(0.9, 0.95), weight_decay=0.1)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, betas=(0.9, 0.95), weight_decay=weight_decay)
     scaler = torch.cuda.amp.GradScaler()
 
     best_val = float("inf")
     train_losses, val_losses = [], []
-    early_stopper = EarlyStopping(patience=10, min_delta=1e-4)
+    early_stopper = EarlyStopping(patience=patience, min_delta=1e-4)
 
     for epoch in range(1, 500):
         print(f"\n=== Epoch {epoch} ===")
@@ -206,7 +250,7 @@ def main():
 
         if val_l1 < best_val:
             best_val = val_l1
-            ckpt_path = os.path.join(outdir, "checkpoints", f"fuxi_epoch{epoch:02d}.pt")
+            ckpt_path = os.path.join(ckpt_dir, f"fuxi_epoch{epoch:02d}.pt")
             torch.save(
                 {
                     "epoch": epoch,
@@ -219,7 +263,6 @@ def main():
             )
             print(f"  [Checkpoint] Saved best model at epoch {epoch}")
 
-        # --- Early stopping check ---
         early_stopper(val_l1)
         if early_stopper.early_stop:
             print(f"Early stopping at epoch {epoch}")
@@ -239,8 +282,8 @@ def main():
         pred_batch = model(history_batch, target_shape=target_batch.shape[-2:])
 
         variable_names = get_variable_names(train_set)
-        num_samples = min(5, history_batch.shape[0])  # Plot up to 5 samples
-        num_vars = min(5, target_batch.shape[1])      # Plot up to 5 variables
+        num_samples = min(5, history_batch.shape[0])
+        num_vars = min(5, target_batch.shape[1])
 
         for i in range(num_samples):
             for v in range(num_vars):
@@ -258,7 +301,6 @@ def main():
                 plt.savefig(os.path.join(plots_dir, f"test_sample_{i}_{var_name}_pred_vs_target.png"))
                 plt.close()
 
-        # Scatter plot for one variable (first variable, all pixels in first sample)
         plt.figure(figsize=(6, 6))
         t = target_batch[0, 0].cpu().flatten().numpy()
         p = pred_batch[0, 0].cpu().flatten().numpy()
