@@ -17,7 +17,7 @@ def pad_to_window(x, window_size, num_downsamples=1, swin_stages=3):
     return x
 
 class ResidualBlock(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, chaennels):
         super().__init__()
         self.block = nn.Sequential(
             nn.Conv2d(channels, channels, kernel_size=3, padding=1),

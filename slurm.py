@@ -11,5 +11,13 @@ jupyter lab --no-browser --port=8888
 
 ssh -L 8888:localhost:8888 -J raj.ayush@192.168.10.3 raj.ayush@cn1
 
+command scp :- -: 
+ all PNG images
+scp raj.ayush@192.168.10.03:~/New/Fuxi-Weather-Prediction/Fuxi/fuxi_wp/Plots/*.png /Users/ayush/Desktop/weather_forcast/new_plots/
+all files
+scp raj.ayush@192.168.10.03:~/New/Fuxi-Weather-Prediction/Fuxi/fuxi_wp/Plots/* /Users/ayush/Desktop/weather_forcast/new_plots/
+entire Plots folder
+scp -r raj.ayush@192.168.10.03:~/New/Fuxi-Weather-Prediction/Fuxi/fuxi_wp/Plots /Users/ayush/Desktop/weather_forcast/new_plots/
+
 
 """

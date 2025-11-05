@@ -9,6 +9,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.cube_embedding import CubeEmbedding3D
+import torch.nn.functional as F
 from models.swin import SwinTransformerV2
 
 class FuXiModel(nn.Module):
@@ -43,17 +44,19 @@ class FuXiModel(nn.Module):
             in_channels=in_channels,
             embed_dim=embed_dim
         )
-        
+
+        # Always pad to (48, 92) after cube embedding
+        self.swin_img_size = (48, 92)
         self.swin_transformer = SwinTransformerV2(
-            img_size=(46, 90),          # Set to your cube embedding output size
+            img_size=self.swin_img_size,
             patch_size=1,             # Use 1 if input is already embedded
             in_chans=embed_dim,       # embed_dim from CubeEmbedding3D (e.g., 1536)
             num_classes=0,            # 0 if you want features, or set to your output classes
             embed_dim=96,             # Swin base embed dim (can tune)
             depths=[2, 2, 6],         # Number of blocks per stage (tune as needed)
             num_heads=[3, 6, 12],     # Heads per stage (tune as needed)
-            window_size=2            # Must divide H and W at all stages
-)
+            window_size=4             # Must divide H and W at all stages
+        )
         
         # Output projection
         self.output_head = nn.Sequential(
@@ -83,6 +86,7 @@ class FuXiModel(nn.Module):
         
         # 1. Cube embedding: reduce spatiotemporal dimensions
         embedded = self.cube_embedding(x)  # (B, embed_dim, H//4, W//4)
+        print("After embedding:", embedded.shape)
 
         # After embedding
         B, C, H, W = embedded.shape
