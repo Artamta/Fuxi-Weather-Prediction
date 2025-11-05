@@ -1,3 +1,4 @@
+
 # --------------------------------------------------------
 # Swin Transformer V2
 # Copyright (c) 2022 Microsoft
@@ -525,7 +526,7 @@ class SwinTransformerV2(nn.Module):
         use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
         pretrained_window_sizes (tuple(int)): Pretrained window sizes of each layer.
     """
-
+#make changes_here
     def __init__(self, img_size=224, patch_size=4, in_chans=3, num_classes=1000,
                  embed_dim=96, depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
                  window_size=7, mlp_ratio=4., qkv_bias=True,
