@@ -5,33 +5,51 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Research%20WIP-orange)](#)
 
-** Under - Devlopment:**
+**Under Development:**
 
 > **Fuxi is a transformer-based pipeline for spatio-temporal climate forecasting.**
 > It combines **Cube Embedding 🧊**, **Swin Transformer 🌐**, and **U-Transformer hierarchy ⬆⬇** to capture both local and global dependencies in climate data.
 
 ---
 
-## ✨ Key Features
+## 🚧 Project Status
 
-- **🧊 Cube Embedding:** Efficient spatio-temporal patching
-- **🌐 Hierarchical Transformers:** Swin + U-Transformer for multi-scale attention
-- **⚡ HPC-Ready:** Slurm & SSH job submission
-- **📊 Metrics:** RMSE, R², Anomaly Correlation Coefficient (ACC)
-- **🔁 Multi-step Forecasting:** Predict several future timesteps
-- **📦 Modular & Reproducible:** Easy to extend and rerun
+- **Repository is in progress:**
+  - Core Fuxi-inspired weather prediction model implemented and actively being trained.
+  - Checkpoints, results, and new features will be updated as the project advances.
 
 ---
 
-## 🔬 Motivation
+## 🌦️ Weather Prediction Model: Deep Learning for WeatherBench2
 
-Climate systems are complex and multiscale. Traditional ML methods struggle with **long-range dependencies** and **regional correlations**.
+- **Dataset:** WeatherBench2, global reanalysis, 54x32 grid resolution.
+- **Variables:**
+  - 5 surface variables
+  - 5 upper-air atmospheric variables
+  - 13 pressure levels for upper-air variables
+- **Input:** Previous 2 time steps (as multi-channel images/cubes)
+- **Architecture Overview:**
+  - **Cube Embedding:** Converts input sequence into compact feature cubes.
+  - **U-Transformer Backbone:**
+    - 48 repeated Swin Transformer blocks
+    - Depths: [12, 12, 24]
+    - Embedding dimension: 1536
+  - **Fully Connected Layer:** Projects features to output channels.
+  - **Bilinear Interpolation:** Upscales output to match target resolution.
+- **Output:** Next time step prediction for all variables (multi-channel image).
+- **Training:**
+  - Latitude-weighted L1 loss for balanced global accuracy.
+  - Model is currently training and under evaluation.
 
-**Fuxi** solves this by:
+---
 
-- Embedding data as spatio-temporal cubes
-- Using hierarchical attention for both global and local context
-- Targeting extreme events (heatwaves, precipitation anomalies)
+## 🔭 Future Work
+
+- [ ] Increase spatial resolution of data and predictions
+- [ ] Optimize and experiment with model architecture
+- [ ] Full-fledged multi-step (autoregressive) prediction
+- [ ] Fine-tuning and transfer learning for specific regions/events
+- [ ] Advanced uncertainty estimation and ensemble methods
 
 ---
 
@@ -54,7 +72,7 @@ Fuxi-Weather-Prediction/
 
 **1. Data**
 
-- Inputs: Temperature, precipitation, NDVI (NetCDF/Xarray)
+- Inputs: 5 surface variables, 5 upper-air variables (13 pressure levels), from WeatherBench2 (NetCDF/Xarray)
 - Preprocessing: Temporal chunking, normalization, train/val/test splits
 
 **2. Model Architecture**
@@ -70,7 +88,7 @@ Fuxi-Weather-Prediction/
 
 **3. Training**
 
-- Loss: MSE / MAE
+- Loss: Latitude-weighted L1 (for global balance)
 - Optimizer: AdamW + Cosine Annealing LR
 - Metrics: RMSE, R², ACC
 - Hardware: HPC cluster (Slurm + SSH)
@@ -112,46 +130,6 @@ Fuxi-Weather-Prediction/
 - **Down Path:** Input is compressed through hierarchical transformer layers (like Swin).
 - **Up Path:** Features are upsampled, with skip connections from earlier layers.
 - **Multi-Scale Attention:** Captures both local and global dependencies, making it powerful for climate and scientific forecasting.
-
----
-
-## 🧑‍💻 Transformer Implementation (From Scratch)
-
-Your [`Tranformer/Transformer.py`](Tranformer/Transformer.py) file implements a full transformer model (encoder-decoder) from scratch using PyTorch.
-
-**Key Components:**
-
-- **SelfAttention:**  
-  Splits input into multiple heads, computes attention scores, and mixes information from all tokens.
-- **TransformerBlock:**  
-  Applies self-attention, adds a feed-forward neural network, and uses LayerNorm and residual connections for stability.
-- **Encoder:**  
-  Embeds input tokens and their positions, stacks several TransformerBlocks, and outputs contextual representations.
-- **Decoder:**  
-  Embeds target tokens and positions, stacks DecoderBlocks (masked self-attention + cross-attention to encoder output), and predicts the next token at each position.
-- **Masks:**  
-  Source mask hides padding tokens; target mask enforces causal (left-to-right) prediction.
-- **Full Transformer:**  
-  Combines encoder and decoder for tasks like translation, sequence prediction, or forecasting.
-
-**How It Works:**
-
-1. **Input Preparation:**  
-   Source and target sequences are embedded and given positional information.
-2. **Encoding:**  
-   The encoder processes the source sequence, building rich representations.
-3. **Decoding:**  
-   The decoder generates the output sequence, one token at a time, using both its own previous outputs and the encoder’s memory.
-4. **Attention Mechanism:**  
-   Allows the model to focus on relevant parts of the input when generating each output token.
-5. **Training:**  
-   Uses teacher forcing: the decoder receives the true previous tokens during training.
-
-**Why This Matters:**
-
-- **From Scratch:** No external transformer libraries; all logic is implemented manually.
-- **Flexible:** Can be adapted for text, images, or climate grids.
-- **Educational:** Shows a clear understanding of transformer internals.
 
 ---
 
