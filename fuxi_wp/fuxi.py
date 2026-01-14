@@ -230,3 +230,4 @@ if __name__ == "__main__":
     print(f"[MEMORY] Input tensor: {input_memory:.2f} GB")
     print(f"[MEMORY] Single output: {output_memory:.2f} GB")
     print(f"[MEMORY] 5-step output: {multi_memory:.2f} GB")
+    #EOFv1

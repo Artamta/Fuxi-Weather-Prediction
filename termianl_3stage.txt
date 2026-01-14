@@ -1,0 +1,24 @@
+torchrun --nproc_per_node=4 multi.py \
+  --exp-name FuXi3Stage_$(date +%Y%m%d_%H%M%S) \
+  --data-root /home/raj.ayush/New/Fuxi-Weather-Prediction/Fuxi/Fuxi_3P/Data \
+  --embed-dim 512 \
+  --encoder-dims 512,768,960 \
+  --swin-depths 3,4,6 \
+  --swin-heads 8,12,15 \
+  --swin-window-size 8 \
+  --drop-path-rate 0.15 \
+  --batch-size 1 \
+  --val-batch-size 1 \
+  --test-batch-size 1 \
+  --history-steps 2 \
+  --lr 1.5e-4 \
+  --weight-decay 0.02 \
+  --betas 0.9,0.95 \
+  --max-epochs 2 \
+  --patience 10 \
+  --num-workers 32 \
+  --in-channels 20 \
+  --out-channels 20 \
+  --input-height 32 \
+  --input-width 64 \
+  --amp
