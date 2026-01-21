@@ -12,3 +12,6 @@
 # check to evolute model
 # how good it is prediction ,
 # swin undet and undet swin (idk)
+
+# Model eval -- detailed only
+
