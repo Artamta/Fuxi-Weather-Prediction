@@ -15,3 +15,4 @@
 
 # Model eval -- detailed only
 
+# Today I will work on model eval, i have to calculate acc rmse strait of the art>.....
