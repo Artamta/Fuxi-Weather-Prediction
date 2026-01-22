@@ -23,3 +23,5 @@
 # start with basic
 # First -> find predictions
 # Second -> check with plots
+# Normalize the values
+# Autoregressive Forecasting
