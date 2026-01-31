@@ -56,7 +56,7 @@ def latitude_weighted_l1_loss(pred, target, latitudes):
 
 
 class MiniFuXiDataset(Dataset):
-    def __init__(self, path: str, history_steps: int = 2, mean=None, std=None):
+    def __init__(self, path: str, history_steps: int = 2, forecast_steps: int = 1, mean=None, std=None):
         ds = xr.open_dataset(path)
         print(f"Loaded {path} variables:", list(ds.data_vars.keys()))
         ds = ds.rename({k: v for k, v in [("latitude", "lat"), ("longitude", "lon")] if k in ds.dims})
@@ -81,6 +81,7 @@ class MiniFuXiDataset(Dataset):
         self.mean = mean
         self.std = std
         self.history = history_steps
+        self.forecast = forecast_steps
 
         latitudes = ds["lat"].values
         if latitudes.shape[0] != data.shape[-2]:
@@ -98,24 +99,39 @@ class MiniFuXiDataset(Dataset):
         ds.close()
 
     def __len__(self):
-        return len(self.data) - self.history
+        return len(self.data) - (self.history + self.forecast) + 1
 
     def __getitem__(self, idx):
         past = self.data[idx : idx + self.history]
-        target = self.data[idx + self.history]
-        past = past.permute(1, 0, 2, 3)
-        return past, target
+        future = self.data[idx + self.history : idx + self.history + self.forecast]
+        past = past.permute(1, 0, 2, 3)  # (C, history, H, W)
+        target_seq = future  # (forecast, C, H, W)
+        return past, target_seq
 
 
-def train_one_epoch(model, loader, optimizer, device, latitudes):
+def autoregressive_rollout(model, history, steps, target_shape):
+    """Unroll the model autoregressively for ``steps`` future predictions."""
+    preds = []
+    current = history
+    for _ in range(steps):
+        pred = model(current, target_shape=target_shape)
+        preds.append(pred)
+        current = torch.cat([current[:, :, 1:], pred.unsqueeze(2)], dim=2)
+    return torch.stack(preds, dim=1)  # (B, steps, C, H, W)
+
+
+def train_one_epoch(model, loader, optimizer, device, latitudes, forecast_steps):
     model.train()
     total = 0.0
-    for history, target in loader:
+    for history, target_seq in loader:
         history = history.to(device)
-        target = target.to(device)
+        target_seq = target_seq.to(device)
         optimizer.zero_grad()
-        pred = model(history, target_shape=target.shape[-2:])
-        loss = latitude_weighted_l1_loss(pred, target, latitudes)
+        preds = autoregressive_rollout(model, history, forecast_steps, target_seq.shape[-2:])
+        loss = 0.0
+        for step in range(forecast_steps):
+            loss = loss + latitude_weighted_l1_loss(preds[:, step], target_seq[:, step], latitudes)
+        loss = loss / forecast_steps
         loss.backward()
         optimizer.step()
         total += loss.item()
@@ -123,17 +139,21 @@ def train_one_epoch(model, loader, optimizer, device, latitudes):
 
 
 @torch.no_grad()
-def eval_one_epoch(model, loader, device, latitudes):
+def eval_one_epoch(model, loader, device, latitudes, forecast_steps):
     model.eval()
     total_l1, total_mae, batches = 0.0, 0.0, 0
-    for history, target in loader:
+    for history, target_seq in loader:
         history = history.to(device)
-        target = target.to(device)
-        pred = model(history, target_shape=target.shape[-2:])
-        l1 = latitude_weighted_l1_loss(pred, target, latitudes)
-        mae = torch.mean(torch.abs(pred - target))
-        total_l1 += l1.item()
-        total_mae += mae.item()
+        target_seq = target_seq.to(device)
+        preds = autoregressive_rollout(model, history, forecast_steps, target_seq.shape[-2:])
+
+        step_l1, step_mae = 0.0, 0.0
+        for step in range(forecast_steps):
+            step_l1 += latitude_weighted_l1_loss(preds[:, step], target_seq[:, step], latitudes).item()
+            step_mae += torch.mean(torch.abs(preds[:, step] - target_seq[:, step])).item()
+
+        total_l1 += step_l1 / forecast_steps
+        total_mae += step_mae / forecast_steps
         batches += 1
     return total_l1 / batches, total_mae / batches
 
@@ -154,16 +174,16 @@ def plot_losses(train_losses, val_losses, outdir):
 @torch.no_grad()
 def plot_prediction_maps(model, dataset, device, mean, std, outdir, sample_idx=0, var_indices=None):
     model.eval()
-    history, target = dataset[sample_idx]
+    history, target_seq = dataset[sample_idx]
     history = history.unsqueeze(0).to(device)
-    target = target.unsqueeze(0).to(device)
+    target_seq = target_seq.unsqueeze(0).to(device)
 
-    pred = model(history, target_shape=target.shape[-2:])
+    preds = autoregressive_rollout(model, history, target_seq.shape[1], target_seq.shape[-2:])
     mean = mean.squeeze(0).cpu()
     std = std.squeeze(0).cpu()
 
-    pred_denorm = pred.cpu()[0] * std + mean
-    target_denorm = target.cpu()[0] * std + mean
+    pred_denorm = preds.cpu()[0, 0] * std + mean
+    target_denorm = target_seq.cpu()[0, 0] * std + mean
 
     if var_indices is None:
         var_indices = [0, len(dataset.var_names) // 2, len(dataset.var_names) - 1]
@@ -199,12 +219,15 @@ def plot_prediction_maps(model, dataset, device, mean, std, outdir, sample_idx=0
 def parse_args():
     parser = argparse.ArgumentParser(description="FuXi advanced training")
     parser.add_argument("--exp-name", type=str, default=None, help="Experiment name (defaults to SLURM_ARRAY_TASK_ID or timestamp).")
+    parser.add_argument("--run-dir", type=str, default=None, help="Optional existing run directory to continue writing outputs.")
+    parser.add_argument("--resume-ckpt", type=str, default=None, help="Path to a checkpoint (.pt) to resume from.")
     parser.add_argument("--models-root", type=str, default="Models", help="Root directory for experiment outputs.")
     parser.add_argument("--data-root", type=str, default="Data", help="Directory containing data files.")
     parser.add_argument("--train-file", type=str, default="train_data_1959_2017.nc")
     parser.add_argument("--val-file", type=str, default="val_data_2018_2020.nc")
     parser.add_argument("--test-file", type=str, default="test_data_2021_2023.nc")
     parser.add_argument("--history-steps", type=int, default=2)
+    parser.add_argument("--forecast-steps", type=int, default=1, help="Number of autoregressive forecast steps per sample.")
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--val-batch-size", type=int, default=None)
     parser.add_argument("--test-batch-size", type=int, default=None)
@@ -246,14 +269,23 @@ def main():
     if exp_name is None:
         exp_name = datetime.now().strftime("manual_%Y%m%d_%H%M%S")
 
-    run_dir = ensure_unique_dir(args.models_root, f"exp_{exp_name}")
+    if args.run_dir:
+        run_dir = args.run_dir
+    elif args.resume_ckpt:
+        run_dir = os.path.dirname(os.path.dirname(args.resume_ckpt))
+    else:
+        run_dir = ensure_unique_dir(args.models_root, f"exp_{exp_name}")
+
+    os.makedirs(run_dir, exist_ok=True)
     ckpt_dir = os.path.join(run_dir, "checkpoints")
     plots_dir = os.path.join(run_dir, "Plots")
     os.makedirs(ckpt_dir, exist_ok=True)
     os.makedirs(plots_dir, exist_ok=True)
 
-    with open(os.path.join(run_dir, "config.json"), "w") as fp:
-        json.dump(vars(args), fp, indent=2)
+    config_path = os.path.join(run_dir, "config.json")
+    if not (args.resume_ckpt and os.path.exists(config_path)):
+        with open(config_path, "w") as fp:
+            json.dump(vars(args), fp, indent=2)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -261,9 +293,9 @@ def main():
     val_path = os.path.join(args.data_root, args.val_file)
     test_path = os.path.join(args.data_root, args.test_file)
 
-    train_set = MiniFuXiDataset(train_path, history_steps=args.history_steps)
-    val_set = MiniFuXiDataset(val_path, history_steps=args.history_steps, mean=train_set.mean, std=train_set.std)
-    test_set = MiniFuXiDataset(test_path, history_steps=args.history_steps, mean=train_set.mean, std=train_set.std)
+    train_set = MiniFuXiDataset(train_path, history_steps=args.history_steps, forecast_steps=args.forecast_steps)
+    val_set = MiniFuXiDataset(val_path, history_steps=args.history_steps, forecast_steps=args.forecast_steps, mean=train_set.mean, std=train_set.std)
+    test_set = MiniFuXiDataset(test_path, history_steps=args.history_steps, forecast_steps=args.forecast_steps, mean=train_set.mean, std=train_set.std)
 
     train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
     val_loader = DataLoader(val_set, batch_size=args.val_batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
@@ -271,7 +303,7 @@ def main():
 
     spatial_shape = tuple(train_set.data.shape[-2:])
     channels = train_set.data.shape[1]
-    latitudes = torch.tensor(train_set.latitudes, dtype=torch.float32)
+    latitudes = torch.tensor(train_set.latitudes, dtype=torch.float32, device=device)
 
     in_channels = args.in_channels or channels
     out_channels = args.out_channels or channels
@@ -297,11 +329,20 @@ def main():
     best_val = float("inf")
     train_losses, val_losses = [], []
     epochs_no_improve = 0
+    start_epoch = 1
 
-    for epoch in range(1, args.max_epochs + 1):
+    if args.resume_ckpt:
+        checkpoint = torch.load(args.resume_ckpt, map_location=device)
+        model.load_state_dict(checkpoint["model_state"])
+        optimizer.load_state_dict(checkpoint["optimizer_state"])
+        best_val = checkpoint.get("val_l1", best_val)
+        start_epoch = checkpoint.get("epoch", 0) + 1
+        print(f"Resumed from {args.resume_ckpt} at epoch {start_epoch - 1} (best val {best_val:.4f}).")
+
+    for epoch in range(start_epoch, args.max_epochs + 1):
         print(f"\n=== Epoch {epoch} ===")
-        train_loss = train_one_epoch(model, train_loader, optimizer, device, latitudes)
-        val_l1, val_mae = eval_one_epoch(model, val_loader, device, latitudes)
+        train_loss = train_one_epoch(model, train_loader, optimizer, device, latitudes, args.forecast_steps)
+        val_l1, val_mae = eval_one_epoch(model, val_loader, device, latitudes, args.forecast_steps)
         print(f"Epoch {epoch}: train_loss={train_loss:.4f} | val_l1={val_l1:.4f} | val_mae={val_mae:.4f}")
 
         train_losses.append(train_loss)
@@ -333,7 +374,7 @@ def main():
 
     plot_losses(train_losses, val_losses, run_dir)
 
-    test_l1, test_mae = eval_one_epoch(model, test_loader, device, latitudes)
+    test_l1, test_mae = eval_one_epoch(model, test_loader, device, latitudes, args.forecast_steps)
     print(f"\nTest set: l1={test_l1:.4f} | mae={test_mae:.4f}")
 
     plot_prediction_maps(model, test_set, device, train_set.mean, train_set.std, run_dir, sample_idx=0)
