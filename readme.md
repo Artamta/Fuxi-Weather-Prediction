@@ -6,6 +6,11 @@
 [![Status](https://img.shields.io/badge/Status-Research%20WIP-orange)](#)
 
 ---
+🔗  Updated Version Available:
+A cleaner, modular, and cluster-ready version of this project is available here:
+👉 https://github.com/Artamta/Fuxi-Updated-V2
+
+---
 
 ## 📝 Project Overview
 
