@@ -4,7 +4,7 @@ Commands:
 srun --partition=gpu --gres=gpu:1 --cpus-per-task=32 --mem=64 --pty bash
 salloc --partition=iiser --gres=gpu:1 --cpus-per-task=32 --mem=256G
 salloc --partition=iiser --gres=gpu:1 --cpus-per-task=32 --mem=256G --job-name=Fuxi_run
-salloc --partition=iiser_gpu --gres=gpu:1 --cpus-per-task=32 --mem=128G --time=72:00:00 --job-name=Fuxi_Train
+salloc --partition=iiser_gpu --gres=gpu:1 --cpus-per-task=32 --mem=128G --time=7-24:00:00 --job-name=Fuxi_Train
 salloc --partition=GPU-AI_prio --gres=gpu:1 --cpus-per-task=32 --mem=512G --job-name=Fuxi_Train
 
 jupyter lab --no-browser --port=8888
